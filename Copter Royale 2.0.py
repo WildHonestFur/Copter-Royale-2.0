@@ -4,7 +4,7 @@
 import pygame
 import mysql.connector
 
-cnx = mysql.connector.connect(user='root', password='iamtheboss', host='127.0.0.1')
+cnx = mysql.connector.connect(user='root', password='----', host='----')
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
