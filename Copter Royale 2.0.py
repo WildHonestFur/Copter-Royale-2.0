@@ -1,10 +1,10 @@
-#Screens: Leaderboard, Waiting Room, Mode Selection, Game, End Screen
+#Screens: Waiting Room, Mode Selection, Game, End Screen
 #Tables: Status, Game, Data
 
 import pygame
 import mysql.connector
 
-cnx = mysql.connector.connect(user='root', password='----', host='----')
+cnx = mysql.connector.connect(user='---', password='---', host='---')
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
@@ -49,6 +49,10 @@ user_stats = {
     "Average Kills": None,
     "Max Kills": None
 }
+
+#Leaderboard part
+selected_tab = "Games Won"
+leaderboard_data = {}
 
 
 def draw_button(rect, text, font, mouse_pos, color, colorclick, textcolor):
@@ -226,7 +230,7 @@ def logging(typeval):
     draw_button(enter_button, "Enter", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
 def home():
-    global frame, running, pcolor, changecolor, name, active_box, user, user_stats
+    global frame, running, pcolor, changecolor, name, active_box, user, user_stats, changecolor
     mouse_pos = pygame.mouse.get_pos()
 
     out_button = pygame.Rect(20, HEIGHT-70, 200, 50)
@@ -282,6 +286,7 @@ def home():
                     "Max Kills": None
                 }
                 active_box = None
+                changecolor = False
                 
             if input_box_name.collidepoint(event.pos):
                 active_box = "name"
@@ -343,7 +348,7 @@ def home():
         pygame.draw.line(screen, (0, 0, 0), (slider_x + hue_pos, slider_y), (slider_x + hue_pos, slider_y + slider_height-2), 2)
 
 def stats():
-    global frame, running, user
+    global frame, running, selected_tab, leaderboard_data
     mouse_pos = pygame.mouse.get_pos()
 
     back_button = pygame.Rect(20, HEIGHT-70, 200, 50)
@@ -357,7 +362,45 @@ def stats():
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if back_button.collidepoint(event.pos):
                 frame = "home"
-            
+            elif leader_button.collidepoint(event.pos):
+                frame = "leader"
+                selected_tab = "Games Won"
+                leaderboard_data = {
+                    "Games Won": [],
+                    "Top 3 Finishes": [],
+                    "Total Kills": [],
+                    "Average Kills": [],
+                    "Max Kills": []
+                }
+                query = f"SELECT user, won FROM stats ORDER BY won DESC;"
+                cursor.execute(query)
+                dat = cursor.fetchall()
+                for i in range(min(5, len(dat))):
+                    leaderboard_data["Games Won"].append(dat[i])
+
+                query = f"SELECT user, topthree FROM stats ORDER BY topthree DESC;"
+                cursor.execute(query)
+                dat = cursor.fetchall()
+                for i in range(min(5, len(dat))):
+                    leaderboard_data["Top 3 Finishes"].append(dat[i])
+
+                query = f"SELECT user, kills FROM stats ORDER BY kills DESC;"
+                cursor.execute(query)
+                dat = cursor.fetchall()
+                for i in range(min(5, len(dat))):
+                    leaderboard_data["Total Kills"].append(dat[i])
+
+                query = f"SELECT user, kills/games FROM stats ORDER BY kills/games DESC;"
+                cursor.execute(query)
+                dat = cursor.fetchall()
+                for i in range(min(5, len(dat))):
+                    leaderboard_data["Average Kills"].append(dat[i])
+
+                query = f"SELECT user, maxkills FROM stats ORDER BY maxkills DESC;"
+                cursor.execute(query)
+                dat = cursor.fetchall()
+                for i in range(min(5, len(dat))):
+                    leaderboard_data["Max Kills"].append(dat[i])
  
 
     screen.fill((200, 200, 200))
@@ -397,7 +440,100 @@ def stats():
         screen.blit(label_surface, label_pos)
         screen.blit(value_surface, value_pos)
 
+def leader():
+    global frame, running, selected_tab
+    mouse_pos = pygame.mouse.get_pos()
 
+    back_button = pygame.Rect(20, HEIGHT - 70, 200, 50)
+
+    pad = 20
+    tabs = list(leaderboard_data.keys())
+    tab_width = 200
+    tab_height = 35
+    tab_padding = 2
+
+    max_tab_area = HEIGHT - 30
+    max_visible_tabs = (HEIGHT - 100) // (tab_height + tab_padding)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if back_button.collidepoint(event.pos):
+                frame = "stats"
+
+            else:
+                for i, tab in enumerate(tabs):
+                    y = 330 + i * (tab_height + tab_padding)
+                    if y + tab_height > HEIGHT - 80:
+                        break
+                    rect = pygame.Rect(pad, y, tab_width, tab_height)
+                    if rect.collidepoint(event.pos):
+                        selected_tab = tab
+
+    screen.fill((200, 200, 200))
+    logo_rect = logo.get_rect(center=(WIDTH/2, 170))
+    screen.blit(logo, logo_rect)
+
+    for i, tab in enumerate(tabs):
+        y = 330 + i * (tab_height + tab_padding)
+        if y + tab_height > HEIGHT - 80:
+            break
+        rect = pygame.Rect(pad, y, tab_width, tab_height)
+        is_selected = (tab == selected_tab)
+        is_hovered = rect.collidepoint(mouse_pos)
+
+        color = (0, 95, 187) if is_selected else (0, 125, 222) if is_hovered else (100, 100, 100)
+
+        tab_surface = pygame.Surface((tab_width, tab_height), pygame.SRCALPHA)
+        pygame.draw.rect(
+            tab_surface, color, (0, 0, tab_width, tab_height),
+            border_top_left_radius=5, border_bottom_left_radius=5
+        )
+        screen.blit(tab_surface, (rect.x, rect.y))
+
+        label = font_mini.render(tab, True, (255, 255, 255))
+        screen.blit(label, (rect.x + 10, rect.y + (tab_height - label.get_height()) // 2))
+
+    stat_x = 250
+    stat_y_start = 330
+    row_height = 36.2
+    num_rows = len(tabs)
+    num_cols = 3
+    col_width = [70, 350, 100]
+    table_width = sum(col_width)
+    table_height = row_height * num_rows
+
+    for i in range(num_rows + 1):
+        y = stat_y_start + i * row_height
+        pygame.draw.line(screen, (120, 120, 120), (stat_x, y), (stat_x + table_width, y), 1)
+
+    for i in range(num_cols + 1):
+        x = stat_x + sum(col_width[:i])
+        pygame.draw.line(screen, (120, 120, 120), (x, stat_y_start), (x, stat_y_start + table_height), 1)
+
+    for i, (user_id, score) in enumerate(leaderboard_data[selected_tab]):
+        rank = str(i + 1)+"."
+
+        rank_surface = font_mini.render(rank, True, (0, 0, 0))
+        user_surface = font_mini.render(user_id, True, (0, 0, 0))
+        user_surface_same = font_mini.render(user_id + " (You)", True, (0, 95, 187))
+        score_surface = font_mini.render(str(score), True, (0, 0, 0))
+
+        rank_pos = rank_surface.get_rect(midleft=(stat_x + 10, 2+stat_y_start + i * row_height + row_height // 2))
+        user_pos = user_surface.get_rect(midleft=(stat_x + col_width[0] + 10, 2+stat_y_start + i * row_height + row_height // 2))
+        score_pos = score_surface.get_rect(midleft=(stat_x + col_width[0]+col_width[1] + 10, 2+stat_y_start + i * row_height + row_height // 2))
+
+        screen.blit(rank_surface, rank_pos)
+        if user_id != user:
+            screen.blit(user_surface, user_pos)
+        else:
+            screen.blit(user_surface_same, user_pos)
+        screen.blit(score_surface, score_pos)
+
+    draw_button(back_button, "Back", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+    
 
 while running:
     if frame == "login":
@@ -410,6 +546,8 @@ while running:
         home()
     elif frame == 'stats':
         stats()
+    elif frame == 'leader':
+        leader()
         
 
     pygame.display.flip()
