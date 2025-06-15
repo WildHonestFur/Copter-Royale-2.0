@@ -1,10 +1,14 @@
-#Screens: Waiting Room, Mode Selection, Game, End Screen
-#Tables: Status, Game, Data
+#unjoin player on game end - make active; calculate state.killcount, state.message, state.place; Reset game values; Stat update
+#check edge cases like player leaving halfway through
+#powers: speed, teleport, sniper, shield, invisibility, rapid fire, homing shots, dash, shotgun, backshot, charge, blast, regen, doubleshots, randomizer
 
 import pygame
 import mysql.connector
+import time
+import math
+from CopterData import Data
 
-cnx = mysql.connector.connect(user='---', password='---', host='---')
+cnx = mysql.connector.connect(user='root', password='iamtheboss', host='127.0.0.1', autocommit=True)
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
@@ -19,41 +23,15 @@ pygame.display.set_caption("Copter Royale 2.0")
 font_medium = pygame.font.SysFont('Courier New', 36)
 font_small = pygame.font.SysFont('Courier New', 24)
 font_mini = pygame.font.SysFont('Courier New', 20)
+font_ultramini = pygame.font.SysFont('Courier New', 15)
 
 logo = pygame.image.load("title.png")
 logo = pygame.transform.smoothscale(logo, (300, 300))
 
 clock = pygame.time.Clock()
 FPS = 60
-running = True
 
-frame = "login"
-
-#Login part
-active_box = None
-username_text = ""
-password_text = ""
-loginerror = ""
-user = None
-
-#Home part
-pcolor = (0, 0, 0)
-changecolor = False
-name = ""
-
-#Stats part
-user_stats = {
-    "Games Won": None,
-    "Top 3 Finishes": None,
-    "Total Kills": None,
-    "Average Kills": None,
-    "Max Kills": None
-}
-
-#Leaderboard part
-selected_tab = "Games Won"
-leaderboard_data = {}
-
+state = Data()
 
 def draw_button(rect, text, font, mouse_pos, color, colorclick, textcolor):
     background_rect = rect.move(-2, 2)
@@ -91,8 +69,116 @@ def create_hue_slider(width, height, saturation=0.8, value=0.95):
             slider.set_at((x, y), color)
     return slider
 
-def login():
-    global frame, running, username_text, password_text, loginerror
+def draw_player(name, color, x, y, angle, health):
+    x = x - state.x + WIDTH // 2
+    y = y - state.y + HEIGHT // 2
+    pygame.draw.circle(screen, color, (x, y), 15)
+
+    gun_length = 20
+    gun_width = 10
+    end_x = x + math.cos(angle) * gun_length
+    end_y = y + math.sin(angle) * gun_length
+
+    dx = end_x - x
+    dy = end_y - y
+
+    length = math.hypot(dx, dy)
+    if length == 0:
+        length = 1
+    dx /= length
+    dy /= length
+
+    px = -dy
+    py = dx
+
+    half_w = gun_width / 2
+    points = [
+        (x + px * half_w, y + py * half_w),
+        (x - px * half_w, y - py * half_w),
+        (end_x - px * half_w, end_y - py * half_w),
+        (end_x + px * half_w, end_y + py * half_w)
+    ]
+
+    pygame.draw.polygon(screen, color, points)
+    
+    health = max(0, min(100, health))
+    pygame.draw.rect(screen, state.pcolor, pygame.Rect(x - 25, y - 35, 50 * (health / 100), 6))
+    pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(x - 25, y - 35, 50.5, 6.5), 1)
+
+
+    text = font_ultramini.render(name, True, (0, 0, 0))
+    text_rect = text.get_rect(center=(x, y - 50))
+    screen.blit(text, text_rect)
+
+def draw_grid(mapwidth, mapheight, gridsize=20, color=(170, 170, 170)):
+    pygame.draw.rect(screen, (230, 230, 230), pygame.Rect(-state.x-mapwidth/2+400, -state.y-mapheight/2+300, mapwidth, mapheight))
+    for i in range(int(mapwidth/gridsize)+1):
+        pygame.draw.line(screen, color, (-state.x+i*gridsize-mapwidth/2+400, 300-state.y-mapheight/2), (-state.x+i*gridsize-mapwidth/2+400, 300-state.y+mapheight/2))
+    for i in range(int(mapheight/gridsize)+1):
+        pygame.draw.line(screen, color, (400-state.x-mapwidth/2, -state.y+i*gridsize-mapheight/2+300), (400-state.x+mapwidth/2, -state.y+i*gridsize-mapheight/2+300))
+    pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(-state.x-mapwidth/2+400, -state.y-mapheight/2+300, mapwidth+1, mapheight+1), 3)
+
+def draw_minimap(map_width, map_height, minimap_size=120, margin=10):
+    minimap_surface = pygame.Surface((minimap_size, minimap_size), pygame.SRCALPHA)
+
+    minimap_surface.fill((50, 50, 50, 230))
+
+    scale_x = minimap_size / map_width
+    scale_y = minimap_size / map_height
+
+    player_x = (state.x + map_width // 2) * scale_x
+    player_y = (state.y + map_height // 2) * scale_y
+
+    pygame.draw.circle(minimap_surface, state.pcolor, (player_x, player_y), 2)
+    screen.blit(minimap_surface, (WIDTH - minimap_size - margin, HEIGHT - minimap_size - margin))
+
+def fire_bullet():
+    bullet_speed = 4
+
+    bx = state.x + math.cos(state.angle) * 20
+    by = state.y + math.sin(state.angle) * 20
+
+    bullet = {
+        "x": bx,
+        "y": by,
+        "velocity": bullet_speed,
+        "angle": state.angle,
+        "damage": 20,
+        "lifetime": 1.25,
+        "starttime": time.time(),
+        "color": state.pcolor,
+        "alpha": 255
+    }
+
+    state.bullets.append(bullet)
+
+def update_bullets():
+    new_bullets = []
+    for bullet in state.bullets:
+        bullet["x"] += math.cos(bullet["angle"]) * bullet["velocity"]
+        bullet["y"] += math.sin(bullet["angle"]) * bullet["velocity"]
+        if time.time()-bullet["starttime"] < bullet["lifetime"]:
+            new_bullets.append(bullet)
+    state.bullets = new_bullets
+
+def draw_bullets():
+    for bullet in state.bullets:        
+        screen_x = bullet["x"] - state.x + WIDTH // 2
+        screen_y = bullet["y"] - state.y + HEIGHT // 2
+
+        if time.time()-bullet["starttime"] > bullet["lifetime"]*0.7:
+            fade = (bullet["lifetime"]-time.time()+bullet["starttime"]) / (bullet["lifetime"]*0.7)
+            bullet["alpha"] = int(255 * fade)
+
+        if bullet["alpha"] <= 0:
+            continue
+        
+        r, g, b = bullet["color"][:3]
+        bullet_surf = pygame.Surface((10, 10), pygame.SRCALPHA)
+        pygame.draw.circle(bullet_surf, (r, g, b, bullet["alpha"]), (5, 5), 5)
+        screen.blit(bullet_surf, (screen_x - 5, screen_y - 5))
+
+def login(state):
     mouse_pos = pygame.mouse.get_pos()
 
     login_button = pygame.Rect(WIDTH/2 - 225, 440, 200, 50)
@@ -100,15 +186,15 @@ def login():
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            state.running = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if login_button.collidepoint(event.pos):
-                username_text, password_text, loginerror = "", "", ""
-                frame = "logging"
+                state.username_text, state.password_text, state.loginerror = "", "", ""
+                state.frame = "logging"
             elif new_user_button.collidepoint(event.pos):
-                username_text, password_text, loginerror = "", "", ""
-                frame = "newuser"
+                state.username_text, state.password_text, state.loginerror = "", "", ""
+                state.frame = "newuser"
 
     screen.fill((200, 200, 200))
     logo_rect = logo.get_rect(center=(WIDTH/2, 170))
@@ -117,8 +203,7 @@ def login():
     draw_button(login_button, "Login", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
     draw_button(new_user_button, "New User", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
-def logging(typeval):
-    global frame, running, active_box, username_text, password_text, loginerror, user, pcolor, name
+def logging(typeval, state):
     mouse_pos = pygame.mouse.get_pos()
 
     back_button = pygame.Rect(20, HEIGHT-70, 200, 50)
@@ -129,92 +214,98 @@ def logging(typeval):
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            state.running = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if back_button.collidepoint(event.pos):
-                frame = "login"
+                state.frame = "login"
             elif enter_button.collidepoint(event.pos):
                 if typeval == 'old':
-                    query = f"SELECT password FROM users WHERE BINARY username = '{username_text}';"
+                    query = f"SELECT password FROM users WHERE BINARY username = '{state.username_text}';"
                     cursor.execute(query)
                     data = cursor.fetchone()
-                    if data is None or len(username_text) < 1 or len(password_text) < 1:
-                        loginerror = "Invalid username/password"
+                    query = f"SELECT state FROM status WHERE BINARY user = '{state.username_text}';"
+                    cursor.execute(query)
+                    data2 = cursor.fetchone()
+                    if data is None or len(state.username_text) < 1 or len(state.password_text) < 1:
+                        state.loginerror = "Invalid username/password"
                     else:
-                        if data[0] == password_text:
-                            user = username_text
-                            frame = "home"
-                            query = f"SELECT r, g, b FROM player WHERE BINARY user = '{user}';"
-                            cursor.execute(query)
-                            pcolor = cursor.fetchone()
-
-                            query = f"SELECT name FROM player WHERE BINARY user = '{user}';"
-                            cursor.execute(query)
-                            name = cursor.fetchone()[0]
-                            if name is None:
-                                name = ""
-                                query = f"UPDATE player SET name = '' WHERE BINARY user = '{user}';"
+                        if data[0] == state.password_text:
+                            if data2[0] == 'i':
+                                state.user = state.username_text
+                                state.frame = "home"
+                                query = f"SELECT r, g, b FROM player WHERE BINARY user = '{state.user}';"
                                 cursor.execute(query)
-                                cnx.commit()
+                                state.pcolor = cursor.fetchone()
+
+                                query = f"SELECT name FROM player WHERE BINARY user = '{state.user}';"
+                                cursor.execute(query)
+                                state.name = cursor.fetchone()[0]
+                                query = f"UPDATE status SET state = 'a' WHERE BINARY user = '{state.user}';"
+                                cursor.execute(query)
+                                if state.name is None:
+                                    state.name = ""
+                                    query = f"UPDATE player SET name = '' WHERE BINARY user = '{state.user}';"
+                                    cursor.execute(query)
+                            else:
+                                state.loginerror = "Logged in elsewhere"
                         else:
-                            loginerror = "Invalid username/password"
+                            state.loginerror = "Invalid username/password"
                 else:
-                    query = f"SELECT password FROM users WHERE BINARY username = '{username_text}';"
+                    query = f"SELECT password FROM users WHERE BINARY username = '{state.username_text}';"
                     cursor.execute(query)
                     data = cursor.fetchone()
                     if data is not None:
-                        loginerror = "Username taken"
+                        state.loginerror = "Username taken"
                     else:
-                        if len(username_text) < 1 or len(password_text) < 1:
-                            loginerror = "Invalid username/password"
+                        if len(state.username_text) < 1 or len(state.password_text) < 1:
+                            state.loginerror = "Invalid username/password"
                         else:
-                            query = f"INSERT INTO users VALUES ('{username_text}', '{password_text}');"
+                            query = f"INSERT INTO users VALUES ('{state.username_text}', '{state.password_text}');"
                             cursor.execute(query)
-                            cnx.commit()
-                            query = f"INSERT INTO player VALUES ('{username_text}', '', 242, 53, 48);"
+                            query = f"INSERT INTO player VALUES ('{state.username_text}', '', 242, 53, 48);"
                             cursor.execute(query)
-                            cnx.commit()
-                            user = username_text
-                            query = f"INSERT INTO stats (user) VALUES ('{user}');"
+                            state.user = state.username_text
+                            query = f"INSERT INTO stats (user) VALUES ('{state.user}');"
                             cursor.execute(query)
-                            cnx.commit()
-                            pcolor = (242, 53, 48)
-                            name = ""
-                            frame = "home"
+                            query = f"INSERT INTO status VALUES ('{state.user}', 'a');"
+                            cursor.execute(query)
+                            state.pcolor = (242, 53, 48)
+                            state.name = ""
+                            state.frame = "home"
             if input_box_user.collidepoint(event.pos):
-                active_box = "user"
+                state.active_box = "user"
             elif input_box_pass.collidepoint(event.pos):
-                active_box = "pass"
+                state.active_box = "pass"
             else:
-                active_box = None
+                state.active_box = None
 
         elif event.type == pygame.KEYDOWN:
-            if active_box == "user":
+            if state.active_box == "user":
                 if event.key == pygame.K_BACKSPACE:
-                    username_text = username_text[:-1]
-                    username_text = username_text.strip()
+                    state.username_text = state.username_text[:-1]
+                    state.username_text = state.username_text.strip()
                 elif event.key == pygame.K_TAB:
-                    active_box = "pass"
-                elif event.key <= 127 and event.unicode.isprintable() and len(username_text) < 20:
-                    username_text += event.unicode
-                    username_text = username_text.strip()
-            elif active_box == "pass":
+                    state.active_box = "pass"
+                elif event.key <= 127 and event.unicode.isprintable() and len(state.username_text) < 20:
+                    state.username_text += event.unicode
+                    state.username_text = state.username_text.strip()
+            elif state.active_box == "pass":
                 if event.key == pygame.K_BACKSPACE:
-                    password_text = password_text[:-1]
-                    password_text = password_text.strip()
+                    state.password_text = state.password_text[:-1]
+                    state.password_text = state.password_text.strip()
                 elif event.key == pygame.K_TAB:
-                    active_box = "user"
-                elif event.key <= 127 and event.unicode.isprintable() and len(password_text) < 20:
-                    password_text += event.unicode
-                    password_text = password_text.strip()
+                    state.active_box = "user"
+                elif event.key <= 127 and event.unicode.isprintable() and len(state.password_text) < 20:
+                    state.password_text += event.unicode
+                    state.password_text = state.password_text.strip()
  
 
     screen.fill((200, 200, 200))
     logo_rect = logo.get_rect(center=(WIDTH/2, 170))
 
-    draw_input_box(input_box_user, username_text, active_box == "user", (0, 125, 222), (0, 95, 187), is_password=False)
-    draw_input_box(input_box_pass, password_text, active_box == "pass", (0, 125, 222), (0, 95, 187), is_password=True)
+    draw_input_box(input_box_user, state.username_text, state.active_box == "user", (0, 125, 222), (0, 95, 187), is_password=False)
+    draw_input_box(input_box_pass, state.password_text, state.active_box == "pass", (0, 125, 222), (0, 95, 187), is_password=True)
 
     label_user = font_small.render("Username:", True, (0, 0, 0))
     label_pass = font_small.render("Password:", True, (0, 0, 0))
@@ -222,19 +313,19 @@ def logging(typeval):
     screen.blit(label_pass, (input_box_pass.x, input_box_pass.y - 25))
     
     screen.blit(logo, logo_rect)
-    text_surface = font_small.render(loginerror, True, (239, 37, 35))
+    text_surface = font_small.render(state.loginerror, True, (239, 37, 35))
     text_rect = text_surface.get_rect(center=(WIDTH/2, 500))
     screen.blit(text_surface, text_rect)
 
     draw_button(back_button, "Back", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
     draw_button(enter_button, "Enter", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
-def home():
-    global frame, running, pcolor, changecolor, name, active_box, user, user_stats, changecolor
+def home(state):
     mouse_pos = pygame.mouse.get_pos()
 
     out_button = pygame.Rect(20, HEIGHT-70, 200, 50)
     stats_button = pygame.Rect(WIDTH - 220, HEIGHT-70, 200, 50)
+    play_button = pygame.Rect(300, HEIGHT-70, 200, 50)
     color_button = pygame.Rect(WIDTH/2-100, 425, 50, 50)
     input_box_name = pygame.Rect(WIDTH/2 - 110, 350, 300, 40)
 
@@ -247,77 +338,89 @@ def home():
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            state.running = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if color_button.collidepoint(event.pos):
-                changecolor = not changecolor
-            if slider_x <= event.pos[0] <= slider_x + slider_width and slider_y <= event.pos[1] <= slider_y + slider_height and changecolor:
+                state.changecolor = not state.changecolor
+            if slider_x <= event.pos[0] <= slider_x + slider_width and slider_y <= event.pos[1] <= slider_y + slider_height and state.changecolor:
                 hue = (event.pos[0] - slider_x) / slider_width * 360
                 color = pygame.Color(0)
                 color.hsva = (hue, 80, 95, 100)
-                pcolor = color
+                state.pcolor = color
 
-                query = f"UPDATE player SET r = {pcolor.r}, g = {pcolor.g}, b = {pcolor.b} WHERE BINARY user = '{user}';"
+                query = f"UPDATE player SET r = {state.pcolor.r}, g = {state.pcolor.g}, b = {state.pcolor.b} WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
-                cnx.commit()
             elif stats_button.collidepoint(event.pos):
-                frame = 'stats'
-                changecolor = False
+                state.frame = 'stats'
+                state.changecolor = False
 
-                query = f"SELECT won, topthree, kills, kills/games, maxkills FROM stats WHERE BINARY user = '{user}';"
+                query = f"SELECT won, topthree, kills, kills/games, maxkills FROM stats WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
                 stat = cursor.fetchone()
 
-                user_stats["Games Won"] = stat[0];
-                user_stats["Top 3 Finishes"] = stat[1];
-                user_stats["Total Kills"] = stat[2];
-                user_stats["Average Kills"] = stat[3];
-                user_stats["Max Kills"] = stat[4];        
+                state.user_stats["Games Won"] = stat[0];
+                state.user_stats["Top 3 Finishes"] = stat[1];
+                state.user_stats["Total Kills"] = stat[2];
+                state.user_stats["Average Kills"] = stat[3];
+                state.user_stats["Max Kills"] = stat[4];        
                 
             elif out_button.collidepoint(event.pos):
-                frame = 'login'
-                user = None
-                user_stats = {
+                state.frame = 'login'
+                query = f"UPDATE status SET state = 'i' WHERE BINARY user = '{state.user}';"
+                cursor.execute(query)
+                state.user = None
+                state.user_stats = {
                     "Games Won": None,
                     "Top 3 Finishes": None,
                     "Total Kills": None,
                     "Average Kills": None,
                     "Max Kills": None
                 }
-                active_box = None
-                changecolor = False
+                state.active_box = None
+                state.changecolor = False            
+
+            elif play_button.collidepoint(event.pos):
+                state.barsize = 0
+                state.bargoal = 0
+                query = f"SELECT mode FROM game;"
+                cursor.execute(query)
+                val = cursor.fetchone()[0]
+                if val in ('ffa', 'team'):
+                    state.frame = 'wait'
+                    query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
+                    cursor.execute(query)
+                elif val == 'off':
+                    state.frame = 'choose'
+                    state.host = True
                 
             if input_box_name.collidepoint(event.pos):
-                active_box = "name"
+                state.active_box = "name"
             else:
-                active_box = None
+                state.active_box = None
 
         elif event.type == pygame.MOUSEMOTION and pygame.mouse.get_pressed()[0]:
-            if slider_x <= event.pos[0] <= slider_x + slider_width and slider_y <= event.pos[1] <= slider_y + slider_height and changecolor:
+            if slider_x <= event.pos[0] <= slider_x + slider_width and slider_y <= event.pos[1] <= slider_y + slider_height and state.changecolor:
                 hue = (event.pos[0] - slider_x) / slider_width * 360
                 color = pygame.Color(0)
                 color.hsva = (hue, 80, 95, 100)
-                pcolor = color
+                state.pcolor = color
 
-                query = f"UPDATE player SET r = {pcolor.r}, g = {pcolor.g}, b = {pcolor.b} WHERE BINARY user = '{user}';"
+                query = f"UPDATE player SET r = {state.pcolor.r}, g = {state.pcolor.g}, b = {state.pcolor.b} WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
-                cnx.commit()
 
         elif event.type == pygame.KEYDOWN:                
-            if active_box == "name":
+            if state.active_box == "name":
                 if event.key == pygame.K_BACKSPACE:
-                    name = name[:-1]
-                    name = name.strip()
-                    query = f"UPDATE player SET name = '{name}' WHERE BINARY user = '{user}';"
+                    state.name = state.name[:-1]
+                    state.name = state.name.strip()
+                    query = f"UPDATE player SET name = '{state.name}' WHERE BINARY user = '{state.user}';"
                     cursor.execute(query)
-                    cnx.commit()    
-                elif event.key <= 127 and event.unicode.isprintable() and len(name) < 20:
-                    name += event.unicode
-                    name = name.strip()
-                    query = f"UPDATE player SET name = '{name}' WHERE BINARY user = '{user}';"
+                elif event.key <= 127 and event.unicode.isprintable() and len(state.name) < 20:
+                    state.name += event.unicode
+                    state.name = state.name.strip()
+                    query = f"UPDATE player SET name = '{state.name}' WHERE BINARY user = '{state.user}';"
                     cursor.execute(query)
-                    cnx.commit()
  
 
     screen.fill((200, 200, 200))
@@ -328,27 +431,27 @@ def home():
     text_rect = text_surface.get_rect(center=(WIDTH/2-150, 450))
     screen.blit(text_surface, text_rect)
 
-    draw_button(color_button, "", font_medium, mouse_pos, pcolor, tuple(map(lambda x: x-40, pcolor)), (0, 0, 0))
+    draw_button(color_button, "", font_medium, mouse_pos, state.pcolor, tuple(map(lambda x: x-40, state.pcolor)), (0, 0, 0))
     
     text_surface = font_small.render("Name: ", True, (0, 0, 0))
     text_rect = text_surface.get_rect(center=(WIDTH/2-155, 370))
     screen.blit(text_surface, text_rect)
     
-    draw_input_box(input_box_name, name, active_box == "name", (0, 125, 222), (0, 95, 187), is_password=False)
+    draw_input_box(input_box_name, state.name, state.active_box == "name", (0, 125, 222), (0, 95, 187), is_password=False)
 
     draw_button(stats_button, "Stats", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
     draw_button(out_button, "Log Out", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+    draw_button(play_button, "Play", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
-    if changecolor:
+    if state.changecolor:
         screen.blit(slider_surface, (slider_x, slider_y))
         pygame.draw.rect(screen, (0, 0, 0), (slider_x, slider_y, slider_width, slider_height), 2)
 
-        color_obj = pygame.Color(*pcolor)
+        color_obj = pygame.Color(*state.pcolor)
         hue_pos = int((color_obj.hsva[0] / 360) * slider_width)
         pygame.draw.line(screen, (0, 0, 0), (slider_x + hue_pos, slider_y), (slider_x + hue_pos, slider_y + slider_height-2), 2)
 
-def stats():
-    global frame, running, selected_tab, leaderboard_data
+def stats(state):
     mouse_pos = pygame.mouse.get_pos()
 
     back_button = pygame.Rect(20, HEIGHT-70, 200, 50)
@@ -357,15 +460,15 @@ def stats():
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            state.running = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if back_button.collidepoint(event.pos):
-                frame = "home"
+                state.frame = "home"
             elif leader_button.collidepoint(event.pos):
-                frame = "leader"
-                selected_tab = "Games Won"
-                leaderboard_data = {
+                state.frame = "leader"
+                state.selected_tab = "Games Won"
+                state.leaderboard_data = {
                     "Games Won": [],
                     "Top 3 Finishes": [],
                     "Total Kills": [],
@@ -376,31 +479,31 @@ def stats():
                 cursor.execute(query)
                 dat = cursor.fetchall()
                 for i in range(min(5, len(dat))):
-                    leaderboard_data["Games Won"].append(dat[i])
+                    state.leaderboard_data["Games Won"].append(dat[i])
 
                 query = f"SELECT user, topthree FROM stats ORDER BY topthree DESC;"
                 cursor.execute(query)
                 dat = cursor.fetchall()
                 for i in range(min(5, len(dat))):
-                    leaderboard_data["Top 3 Finishes"].append(dat[i])
+                    state.leaderboard_data["Top 3 Finishes"].append(dat[i])
 
                 query = f"SELECT user, kills FROM stats ORDER BY kills DESC;"
                 cursor.execute(query)
                 dat = cursor.fetchall()
                 for i in range(min(5, len(dat))):
-                    leaderboard_data["Total Kills"].append(dat[i])
+                    state.leaderboard_data["Total Kills"].append(dat[i])
 
                 query = f"SELECT user, kills/games FROM stats ORDER BY kills/games DESC;"
                 cursor.execute(query)
                 dat = cursor.fetchall()
                 for i in range(min(5, len(dat))):
-                    leaderboard_data["Average Kills"].append(dat[i])
+                    state.leaderboard_data["Average Kills"].append(dat[i])
 
                 query = f"SELECT user, maxkills FROM stats ORDER BY maxkills DESC;"
                 cursor.execute(query)
                 dat = cursor.fetchall()
                 for i in range(min(5, len(dat))):
-                    leaderboard_data["Max Kills"].append(dat[i])
+                    state.leaderboard_data["Max Kills"].append(dat[i])
  
 
     screen.fill((200, 200, 200))
@@ -412,7 +515,7 @@ def stats():
 
     row_height = 30
     col_width = 250
-    num_rows = len(user_stats)
+    num_rows = len(state.user_stats)
     num_cols = 2
     padding = 10
 
@@ -430,7 +533,7 @@ def stats():
     pygame.draw.line(screen, (120, 120, 120), (stat_x, stat_y_start), (stat_x, stat_y_start + table_height), 1)
     pygame.draw.line(screen, (120, 120, 120), (stat_x + 2*col_width, stat_y_start), (stat_x + 2*col_width, stat_y_start + table_height), 1)
 
-    for i, (label, value) in enumerate(user_stats.items()):
+    for i, (label, value) in enumerate(state.user_stats.items()):
         label_surface = font_mini.render(label, True, (0, 0, 0))
         value_surface = font_mini.render(str(value), True, (0, 0, 0))
 
@@ -440,14 +543,13 @@ def stats():
         screen.blit(label_surface, label_pos)
         screen.blit(value_surface, value_pos)
 
-def leader():
-    global frame, running, selected_tab
+def leader(state):
     mouse_pos = pygame.mouse.get_pos()
 
     back_button = pygame.Rect(20, HEIGHT - 70, 200, 50)
 
     pad = 20
-    tabs = list(leaderboard_data.keys())
+    tabs = list(state.leaderboard_data.keys())
     tab_width = 200
     tab_height = 35
     tab_padding = 2
@@ -457,11 +559,11 @@ def leader():
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            running = False
+            state.running = False
 
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if back_button.collidepoint(event.pos):
-                frame = "stats"
+                state.frame = "stats"
 
             else:
                 for i, tab in enumerate(tabs):
@@ -470,7 +572,7 @@ def leader():
                         break
                     rect = pygame.Rect(pad, y, tab_width, tab_height)
                     if rect.collidepoint(event.pos):
-                        selected_tab = tab
+                        state.selected_tab = tab
 
     screen.fill((200, 200, 200))
     logo_rect = logo.get_rect(center=(WIDTH/2, 170))
@@ -481,16 +583,13 @@ def leader():
         if y + tab_height > HEIGHT - 80:
             break
         rect = pygame.Rect(pad, y, tab_width, tab_height)
-        is_selected = (tab == selected_tab)
+        is_selected = (tab == state.selected_tab)
         is_hovered = rect.collidepoint(mouse_pos)
 
         color = (0, 95, 187) if is_selected else (0, 125, 222) if is_hovered else (100, 100, 100)
 
         tab_surface = pygame.Surface((tab_width, tab_height), pygame.SRCALPHA)
-        pygame.draw.rect(
-            tab_surface, color, (0, 0, tab_width, tab_height),
-            border_top_left_radius=5, border_bottom_left_radius=5
-        )
+        pygame.draw.rect(tab_surface, color, (0, 0, tab_width, tab_height),border_top_left_radius=5, border_bottom_left_radius=5)
         screen.blit(tab_surface, (rect.x, rect.y))
 
         label = font_mini.render(tab, True, (255, 255, 255))
@@ -513,7 +612,7 @@ def leader():
         x = stat_x + sum(col_width[:i])
         pygame.draw.line(screen, (120, 120, 120), (x, stat_y_start), (x, stat_y_start + table_height), 1)
 
-    for i, (user_id, score) in enumerate(leaderboard_data[selected_tab]):
+    for i, (user_id, score) in enumerate(state.leaderboard_data[state.selected_tab]):
         rank = str(i + 1)+"."
 
         rank_surface = font_mini.render(rank, True, (0, 0, 0))
@@ -526,7 +625,7 @@ def leader():
         score_pos = score_surface.get_rect(midleft=(stat_x + col_width[0]+col_width[1] + 10, 2+stat_y_start + i * row_height + row_height // 2))
 
         screen.blit(rank_surface, rank_pos)
-        if user_id != user:
+        if user_id != state.user:
             screen.blit(user_surface, user_pos)
         else:
             screen.blit(user_surface_same, user_pos)
@@ -534,24 +633,198 @@ def leader():
 
     draw_button(back_button, "Back", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
     
+def waiting(state):
+    mouse_pos = pygame.mouse.get_pos()
 
-while running:
-    if frame == "login":
-        login()
-    elif frame == 'logging':
-        logging('old')
-    elif frame == 'newuser':
-        logging('new')
-    elif frame == 'home':
-        home()
-    elif frame == 'stats':
-        stats()
-    elif frame == 'leader':
-        leader()
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            state.running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            pass
+        
+    screen.fill((200, 200, 200))
+    logo_rect = logo.get_rect(center=(WIDTH/2, 170))
+    screen.blit(logo, logo_rect)
+
+    text_surface = font_medium.render("Loading...", True, (0, 0, 0))
+    text_rect = text_surface.get_rect(center=(WIDTH/2, 420))
+    screen.blit(text_surface, text_rect)
+
+    now = time.time()
+    if now > state.lastcheck + 1:
+        state.lastcheck = now
+        query = f"SELECT count(*) FROM status WHERE state = 'j';"
+        cursor.execute(query)
+        joined = cursor.fetchone()[0]
+        query = f"SELECT count(*) FROM status WHERE state = 'a';"
+        cursor.execute(query)
+        active = cursor.fetchone()[0]
+        state.bargoal = 400*joined/(joined+active)
+
+    state.barsize += min(3, abs(state.bargoal - state.barsize)) * (1 if state.bargoal > state.barsize else -1)
+
+    pygame.draw.rect(screen,(0, 125, 222), (200, 465, state.barsize, 30))
+    pygame.draw.rect(screen,(0, 95, 187), (200, 465, 400, 30), 5)
+
+    if 399 < state.barsize < 401:
+        state.frame = 'game'
+        query = f"SELECT mode FROM game;"
+        cursor.execute(query)
+        val = cursor.fetchone()[0]
+        if val in ('ffa', 'team') and state.host:
+            query = f"UPDATE game SET mode = '{val}play';"
+            cursor.execute(query)
+
+def mode(state):
+    mouse_pos = pygame.mouse.get_pos()
+
+    ffa_button = pygame.Rect(WIDTH/2 - 225, 440, 200, 50)
+    team_button = pygame.Rect(WIDTH/2 + 25, 440, 200, 50)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            state.running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if ffa_button.collidepoint(event.pos):
+                query = f"UPDATE game SET mode = 'ffa';"
+                cursor.execute(query)
+                state.frame = 'wait'
+                query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
+                cursor.execute(query)
+                state.mode = 'ffa'
+                
+            elif team_button.collidepoint(event.pos):
+                query = f"UPDATE game SET mode = 'team';"
+                cursor.execute(query)
+                state.frame = 'wait'
+                query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
+                cursor.execute(query)
+                state.mode = 'team'
+
+    screen.fill((200, 200, 200))
+    logo_rect = logo.get_rect(center=(WIDTH/2, 170))
+    screen.blit(logo, logo_rect)
+
+    text_surface = font_medium.render("Mode:", True, (0, 0, 0))
+    text_rect = text_surface.get_rect(center=(WIDTH/2, 390))
+    screen.blit(text_surface, text_rect)
+
+    draw_button(ffa_button, "FFA", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+    draw_button(team_button, "Team", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+
+def end(state):
+    mouse_pos = pygame.mouse.get_pos()
+
+    home_button = pygame.Rect(20, HEIGHT - 70, 200, 50)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            state.running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if home_button.collidepoint(event.pos):
+                state.frame = 'home'
+                query = f"SELECT mode FROM game;"
+                cursor.execute(query)
+                val = cursor.fetchone()[0]
+                if 'play' in val:
+                    query = f"UPDATE game SET mode = 'off';"
+                    cursor.execute(query)
+                    state.mode = 'off'
+                state.killcount = 0
+                state.place = 0
+                state.message = ''
+           
+
+    screen.fill((200, 200, 200))
+    logo_rect = logo.get_rect(center=(WIDTH/2, 170))
+    screen.blit(logo, logo_rect)
+
+    draw_button(home_button, "Home", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+
+def game(state):
+    mouse_pos = pygame.mouse.get_pos()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            state.running = False
+
+    keys = pygame.key.get_pressed()
+    dx = 0
+    dy = 0
+    speed = 1.5
+
+    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        dx -= 1
+    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        dx += 1
+    if keys[pygame.K_UP] or keys[pygame.K_w]:
+        dy -= 1
+    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+        dy += 1
+
+    if dx != 0 and dy != 0:
+        dx *= 0.7071
+        dy *= 0.7071
+    
+    state.x = max(-1000, min(state.x + dx * speed, 1000))
+    state.y = max(-1000, min(state.y + dy * speed, 1000))
+           
+    screen.fill((170, 170, 170))
+    draw_grid(2000, 2000)
+    state.angle = math.atan2(mouse_pos[1]-300, mouse_pos[0]-400)
+    update_bullets()
+    draw_bullets()
+
+    draw_player(state.name, state.pcolor, state.x, state.y, state.angle, state.health)
+    draw_minimap(2000, 2000)
+
+    mouse_buttons = pygame.mouse.get_pressed()
+    if mouse_buttons[0] and time.time() > state.lastbullet+0.5:
+        fire_bullet()
+        state.lastbullet = time.time()
+    
+
+while state.running:
+    if state.frame == "login":
+        login(state)
+    elif state.frame == 'logging':
+        logging('old', state)
+    elif state.frame == 'newuser':
+        logging('new', state)
+    elif state.frame == 'home':
+        home(state)
+    elif state.frame == 'stats':
+        stats(state)
+    elif state.frame == 'leader':
+        leader(state)
+    elif state.frame == 'wait':
+        waiting(state)
+    elif state.frame == 'choose':
+        mode(state)
+    elif state.frame == 'end':
+        end(state)
+    elif state.frame == 'game':
+        game(state)
         
 
     pygame.display.flip()
     clock.tick(FPS)
 
+
+if state.user is not None:
+    query = f"UPDATE status SET state = 'i' WHERE BINARY user = '{state.user}';"
+    cursor.execute(query)
+    
+query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+cursor.execute(query)
+active = cursor.fetchone()[0]
+
+if active == 0:
+    query = f"UPDATE game SET mode = 'off';"
+    cursor.execute(query)
+    
 pygame.quit()
 cnx.close()
