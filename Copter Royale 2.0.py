@@ -1,6 +1,6 @@
 #unjoin player on game end - make active; calculate state.killcount, state.message, state.place; Reset game values; Stat update
 #check edge cases like player leaving halfway through
-#powers: speed, teleport, sniper, shield, invisibility, rapid fire, homing shots, dash, shotgun, backshot, charge, blast, regen, doubleshots, randomizer
+#powers: speed, sniper (zoom out left), rapid fire, dash, regen, backshot, double, charge, shotgun, blast, teleport, homing, invisibility, shield, randomizer
 
 import pygame
 import mysql.connector
@@ -69,6 +69,14 @@ def create_hue_slider(width, height, saturation=0.8, value=0.95):
             slider.set_at((x, y), color)
     return slider
 
+def draw_shield_glow(surf, x, y, radius, color, layers=10):
+    x = x - state.x + WIDTH // 2
+    y = y - state.y + HEIGHT // 2
+    for i in range(layers):
+        alpha = max(0, 255 - i * 25)
+        glow_color = (*color, alpha)
+        pygame.draw.circle(surf, glow_color, (x, y), radius + i, width=2)
+
 def draw_player(name, color, x, y, angle, health):
     x = x - state.x + WIDTH // 2
     y = y - state.y + HEIGHT // 2
@@ -133,28 +141,171 @@ def draw_minimap(map_width, map_height, minimap_size=120, margin=10):
     screen.blit(minimap_surface, (WIDTH - minimap_size - margin, HEIGHT - minimap_size - margin))
 
 def fire_bullet():
-    bullet_speed = 4
+    bullet_speed = 4.2
 
     bx = state.x + math.cos(state.angle) * 20
     by = state.y + math.sin(state.angle) * 20
 
-    bullet = {
-        "x": bx,
-        "y": by,
-        "velocity": bullet_speed,
-        "angle": state.angle,
-        "damage": 20,
-        "lifetime": 1.25,
-        "starttime": time.time(),
-        "color": state.pcolor,
-        "alpha": 255
-    }
-
-    state.bullets.append(bullet)
+    if state.power == 'sniper':    
+        bullet = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed*2,
+            "angle": state.angle,
+            "damage": 40,
+            "lifetime": 2.2,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet)
+    elif state.power == 'backshot':
+        bullet1 = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 1.5,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        bullet2 = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed,
+            "angle": state.angle+math.pi,
+            "damage": 20,
+            "lifetime": 1.5,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet1)
+        state.bullets.append(bullet2)
+    elif state.power == 'double':
+        dx = math.cos(state.angle + math.pi / 2) * 8
+        dy = math.sin(state.angle + math.pi / 2) * 8
+        bullet1 = {
+            "x": bx+dx,
+            "y": by+dy,
+            "velocity": bullet_speed,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 1.5,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        bullet2 = {
+            "x": bx-dx,
+            "y": by-dy,
+            "velocity": bullet_speed,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 1.5,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet1)
+        state.bullets.append(bullet2)
+    elif state.power == 'shotgun':
+        for i in range(5):
+            bullet = {
+                "x": bx,
+                "y": by,
+                "velocity": bullet_speed,
+                "angle": state.angle+(math.pi/15)*(i-2),
+                "damage": 7,
+                "lifetime": 1.5,
+                "starttime": time.time(),
+                "color": state.pcolor,
+                "alpha": 255,
+                "type": 5
+            }
+            state.bullets.append(bullet)
+    elif state.power == 'blast':
+        for i in range(24):
+            bullet = {
+                "x": state.x,
+                "y": state.y,
+                "velocity": bullet_speed*0.8,
+                "angle": state.angle+(math.pi/12)*i,
+                "damage": 20,
+                "lifetime": 1,
+                "starttime": time.time(),
+                "color": state.pcolor,
+                "alpha": 255,
+                "type": 5
+            }
+            state.bullets.append(bullet)
+    elif state.power == 'charge':
+        bullet = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed*1.25,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 1.75,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet)
+    elif state.power == 'homing':
+        bullet = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 3,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet)
+    else:
+        bullet = {
+            "x": bx,
+            "y": by,
+            "velocity": bullet_speed,
+            "angle": state.angle,
+            "damage": 20,
+            "lifetime": 1.25,
+            "starttime": time.time(),
+            "color": state.pcolor,
+            "alpha": 255,
+            "type": 5
+        }
+        state.bullets.append(bullet)
 
 def update_bullets():
     new_bullets = []
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    world_mouse_x = state.x + (mouse_x - WIDTH // 2)
+    world_mouse_y = state.y + (mouse_y - HEIGHT // 2)
+    
     for bullet in state.bullets:
+        if state.power == "homing":
+            dx = world_mouse_x - bullet["x"]
+            dy = world_mouse_y - bullet["y"]
+            target_angle = math.atan2(dy, dx)
+
+            current_angle = bullet["angle"]
+            turn_speed = 0.2
+            angle_diff = (target_angle - current_angle + math.pi) % (2 * math.pi) - math.pi
+            bullet["angle"] += max(-turn_speed, min(turn_speed, angle_diff))
+            
         bullet["x"] += math.cos(bullet["angle"]) * bullet["velocity"]
         bullet["y"] += math.sin(bullet["angle"]) * bullet["velocity"]
         if time.time()-bullet["starttime"] < bullet["lifetime"]:
@@ -174,9 +325,14 @@ def draw_bullets():
             continue
         
         r, g, b = bullet["color"][:3]
-        bullet_surf = pygame.Surface((10, 10), pygame.SRCALPHA)
-        pygame.draw.circle(bullet_surf, (r, g, b, bullet["alpha"]), (5, 5), 5)
-        screen.blit(bullet_surf, (screen_x - 5, screen_y - 5))
+        if state.power == 'charge':
+            inx = state.bullets.index(bullet)
+            state.bullets[inx]['damage'] += 0.2
+            state.bullets[inx]['type'] += 0.12
+            
+        bullet_surf = pygame.Surface((2*bullet['type'], 2*bullet['type']), pygame.SRCALPHA)
+        pygame.draw.circle(bullet_surf, (r, g, b, bullet["alpha"]), (bullet['type'], bullet['type']), bullet['type'])
+        screen.blit(bullet_surf, (screen_x - bullet['type'], screen_y - bullet['type']))
 
 def login(state):
     mouse_pos = pygame.mouse.get_pos()
@@ -754,7 +910,22 @@ def game(state):
     keys = pygame.key.get_pressed()
     dx = 0
     dy = 0
+    wait = 0.5
     speed = 1.5
+    if state.power == 'speed':
+        speed = 3.5
+    elif state.power == 'dash':
+        speed = 15
+    elif state.power == 'regen':
+        state.health = min(state.health + 0.25, 100)
+    elif state.power == 'rapid fire':
+        wait = 0.15
+    elif state.power == 'sniper':
+        wait = 0.9
+    elif state.power == 'teleport':
+        if -1000 < state.x + mouse_pos[0]-400 < 1000 and -1000 < state.y + mouse_pos[1]-300 < 1000:
+            state.x += mouse_pos[0]-400
+            state.y += mouse_pos[1]-300
 
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         dx -= 1
@@ -778,11 +949,16 @@ def game(state):
     update_bullets()
     draw_bullets()
 
+    if state.power == 'shield':
+        glow_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        draw_shield_glow(glow_surface, state.x, state.y, 15, state.pcolor[:3], layers=10)
+        screen.blit(glow_surface, (0, 0))
+            
     draw_player(state.name, state.pcolor, state.x, state.y, state.angle, state.health)
     draw_minimap(2000, 2000)
 
     mouse_buttons = pygame.mouse.get_pressed()
-    if mouse_buttons[0] and time.time() > state.lastbullet+0.5:
+    if mouse_buttons[0] and time.time() > state.lastbullet+wait:
         fire_bullet()
         state.lastbullet = time.time()
     
