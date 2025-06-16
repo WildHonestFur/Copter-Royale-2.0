@@ -42,6 +42,7 @@ class Data:
         # --- Game part ---
         self.host = False
         self.mode = 'off'
+        self.power = ''
         self.health = 100
         self.x = 0
         self.y = 0
