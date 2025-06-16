@@ -8,7 +8,7 @@ import time
 import math
 from CopterData import Data
 
-cnx = mysql.connector.connect(user='root', password='iamtheboss', host='127.0.0.1', autocommit=True)
+cnx = mysql.connector.connect(user='---', password='---', host='---', autocommit=True)
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
