@@ -1,4 +1,8 @@
 class Data:
+    # --- Global ---
+    powernames = ["Speed", "Sniper", "Invisibility", "Rapid Fire", "Homing Shots", "Surge Shot", "Dash", "Regeneration", "Blast", "Teleport", "Shield",
+                  "Shotgun", "Backshots", "Dual Fire", "Randomizer"]
+    
     def __init__(self):
         # --- Game control ---
         self.frame = "login"
@@ -42,6 +46,8 @@ class Data:
         # --- Game part ---
         self.host = False
         self.mode = 'off'
+        self.chosen = 'Speed'
+        self.choosing = 0
         self.power = ''
         self.health = 100
         self.x = 0
@@ -49,3 +55,6 @@ class Data:
         self.angle = 0
         self.bullets = []
         self.lastbullet = -1
+
+        self.enemies = []
+        self.ebullets = []
