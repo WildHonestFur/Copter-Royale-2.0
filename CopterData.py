@@ -1,7 +1,24 @@
 class Data:
     # --- Global ---
-    powernames = ["Speed", "Sniper", "Invisibility", "Rapid Fire", "Homing Shots", "Surge Shot", "Dash", "Regeneration", "Blast", "Teleport", "Shield",
-                  "Shotgun", "Backshots", "Dual Fire", "Randomizer"]
+    powernames = ["Speed", "Sniper", "Invisibility", "Rapid Fire", "Homing Shots", "Dash", "Regeneration", "Blast", "Teleport", "Shield",
+                  "Shotgun", "Backshots", "Dual Fire", "Surge Shot", "Randomizer"]
+    powermap = {
+        "Speed": "speed",
+        "Sniper": "sniper",
+        "Invisibility": "invis",
+        "Rapid Fire": "rapid fire",
+        "Homing Shots": "homing",
+        "Surge Shot": "charge",
+        "Dash": "dash",
+        "Regeneration": "regen",
+        "Blast": "blast",
+        "Teleport": "teleport",
+        "Shield": "shield",
+        "Shotgun": "shotgun",
+        "Backshots": "backshot",
+        "Dual Fire": "double",
+        "Randomizer": "random"
+    }
     
     def __init__(self):
         # --- Game control ---
