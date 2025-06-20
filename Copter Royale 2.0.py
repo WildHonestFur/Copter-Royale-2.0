@@ -543,12 +543,9 @@ def home(state):
                 cursor.execute(query)
                 val = cursor.fetchone()[0]
                 if val in ('ffa', 'team'):
-                    state.frame = 'wait'
-                    query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
-                    cursor.execute(query)
+                    state.frame = 'power'
                 elif val == 'off':
-                    state.frame = 'choose'
-                    state.host = True
+                    state.frame = 'power'
                 
             if input_box_name.collidepoint(event.pos):
                 state.active_box = "name"
@@ -870,6 +867,85 @@ def mode(state):
     draw_button(ffa_button, "FFA", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
     draw_button(team_button, "Team", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
+def power(state):
+    mouse_pos = pygame.mouse.get_pos()
+
+    con_button = pygame.Rect(WIDTH - 220, HEIGHT - 70, 200, 50)
+    prev_button = pygame.Rect(20, 400+20, 60, 50)
+    next_button = pygame.Rect(WIDTH-80, 400+20, 60, 50)
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            state.running = False
+
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if con_button.collidepoint(event.pos):
+                query = f"SELECT mode FROM game;"
+                cursor.execute(query)
+                val = cursor.fetchone()[0]
+                if val in ('ffa', 'team'):
+                    state.frame = 'wait'
+                    query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
+                    cursor.execute(query)
+                elif val == 'off':
+                    state.frame = 'choose'
+                    state.host = True
+            elif next_button.collidepoint(event.pos):
+                state.choosing = min(4, state.choosing+1)
+            elif prev_button.collidepoint(event.pos):
+                state.choosing = max(0, state.choosing-1)
+            elif 421 < mouse_pos[1] < 471:
+                if 90 < mouse_pos[0] < 290:
+                    state.chosen = Data.powernames[3*state.choosing]
+                if 300 < mouse_pos[0] < 500:
+                    state.chosen = Data.powernames[3*state.choosing+1]
+                if 510 < mouse_pos[0] < 710:
+                    state.chosen = Data.powernames[3*state.choosing+2]
+           
+    screen.fill((200, 200, 200))
+    logo_rect = logo.get_rect(center=(WIDTH/2, 170))
+    screen.blit(logo, logo_rect)
+
+    text_surface = font_medium.render("Power:", True, (0, 0, 0))
+    text_rect = text_surface.get_rect(center=(WIDTH/2, 360))
+    screen.blit(text_surface, text_rect)
+
+    if state.choosing != 0:
+        draw_button(prev_button, "<", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+    else:
+        draw_button(prev_button, "<", font_medium, mouse_pos, (120, 120, 120), (100, 100, 100), (0, 0, 0))
+        
+    if state.choosing != 4:
+        draw_button(next_button, ">", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+    else:
+        draw_button(next_button, ">", font_medium, mouse_pos, (120, 120, 120), (100, 100, 100), (0, 0, 0))
+    
+    if state.chosen == Data.powernames[3*state.choosing]:
+        pygame.draw.rect(screen,(0, 95, 187), (80+10, 421, 200, 50))
+    else:
+        pygame.draw.rect(screen,(120, 120, 120), (80+10, 421, 200, 50))
+    text_surf = font_small.render(Data.powernames[3*state.choosing], True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(190, 446))
+    screen.blit(text_surf, text_rect)
+
+    if state.chosen == Data.powernames[3*state.choosing+1]:
+        pygame.draw.rect(screen,(0, 95, 187), (80+20+200, 421, 200, 50))
+    else:
+        pygame.draw.rect(screen,(120, 120, 120), (80+20+200, 421, 200, 50))
+    text_surf = font_small.render(Data.powernames[3*state.choosing+1], True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(400, 446))
+    screen.blit(text_surf, text_rect)
+
+    if state.chosen == Data.powernames[3*state.choosing+2]:
+        pygame.draw.rect(screen,(0, 95, 187), (80+30+200+200, 421, 200, 50))
+    else:
+        pygame.draw.rect(screen,(120, 120, 120), (80+30+400, 421, 200, 50))
+    text_surf = font_small.render(Data.powernames[3*state.choosing+2], True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(610, 446))
+    screen.blit(text_surf, text_rect)
+        
+    draw_button(con_button, "Continue", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
+
 def end(state):
     mouse_pos = pygame.mouse.get_pos()
 
@@ -961,6 +1037,8 @@ def game(state):
     if mouse_buttons[0] and time.time() > state.lastbullet+wait:
         fire_bullet()
         state.lastbullet = time.time()
+
+
     
 
 while state.running:
@@ -978,6 +1056,8 @@ while state.running:
         leader(state)
     elif state.frame == 'wait':
         waiting(state)
+    elif state.frame == 'power':
+        power(state)
     elif state.frame == 'choose':
         mode(state)
     elif state.frame == 'end':
