@@ -6,6 +6,7 @@ import pygame
 import mysql.connector
 import time
 import math
+import random
 from CopterData import Data
 
 cnx = mysql.connector.connect(user='---', password='---', host='---', autocommit=True)
