@@ -822,6 +822,7 @@ def waiting(state):
 
     if 399 < state.barsize < 401:
         state.frame = 'game'
+        state.lasttime = time.time()
         query = f"SELECT mode FROM game;"
         cursor.execute(query)
         val = cursor.fetchone()[0]
@@ -982,6 +983,24 @@ def game(state):
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             state.running = False
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_f, pygame.K_SPACE) and state.power == '' and time.time() - state.lasttime > Data.powerdata[Data.powermap[state.chosen]][1]:
+                if state.chosen != 'Teleport':
+                    state.power = Data.powermap[state.chosen]
+                    state.lasttime = time.time()
+                    if state.power == 'random':
+                        options = ["Speed", "Sniper", "Invisibility", "Rapid Fire", "Homing Shots", "Regeneration", "Blast", "Shield", "Shotgun",
+                                   "Backshots", "Dual Fire", "Surge Shot"]
+                        state.power = Data.powermap[random.choice(options)]
+                    if state.power == 'blast':
+                        fire_bullet()
+                        state.power = ''
+                        state.lasttime = time.time()
+                elif -1000 < state.x + mouse_pos[0]-400 < 1000 and -1000 < state.y + mouse_pos[1]-300 < 1000:
+                    state.power = Data.powermap[state.chosen]
+                    state.lasttime = time.time()
+                    
+                    
 
     keys = pygame.key.get_pressed()
     dx = 0
@@ -1002,6 +1021,8 @@ def game(state):
         if -1000 < state.x + mouse_pos[0]-400 < 1000 and -1000 < state.y + mouse_pos[1]-300 < 1000:
             state.x += mouse_pos[0]-400
             state.y += mouse_pos[1]-300
+        state.power = ''
+        state.lasttime = time.time()
 
     if keys[pygame.K_LEFT] or keys[pygame.K_a]:
         dx -= 1
@@ -1027,7 +1048,7 @@ def game(state):
 
     if state.power == 'shield':
         glow_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        draw_shield_glow(glow_surface, state.x, state.y, 15, state.pcolor[:3], layers=10)
+        draw_shield_glow(glow_surface, state.x, state.y, 12, state.pcolor[:3], layers=10)
         screen.blit(glow_surface, (0, 0))
             
     draw_player(state.name, state.pcolor, state.x, state.y, state.angle, state.health)
@@ -1037,7 +1058,29 @@ def game(state):
     if mouse_buttons[0] and time.time() > state.lastbullet+wait:
         fire_bullet()
         state.lastbullet = time.time()
+        
+    val = Data.powerdata[Data.powermap[state.chosen]][0]
+    if state.power == '':
+        pygame.draw.rect(screen, state.pcolor, (180, 562, 440*min(1, (time.time() - state.lasttime)/Data.powerdata[Data.powermap[state.chosen]][1]), 20), border_radius=3)
+    else:
+        pygame.draw.rect(screen, state.pcolor, (180, 562, 440*max(0, (val+state.lasttime-time.time())/val), 20), border_radius=3)
 
+    if val+state.lasttime-time.time() < 0 and state.power != '':
+        state.power = ''
+        state.lasttime = time.time()
+
+    
+    pygame.draw.rect(screen,(0, 0, 0), (180, 562, 440, 20), 1, border_radius=3)
+    if state.power == '':
+        if time.time() - state.lasttime > Data.powerdata[Data.powermap[state.chosen]][1]:
+            stuff = 'Superpower ready. Press F or SPACE to activate.'
+        else:
+            stuff = f'Superpower recharging...'
+    else:
+        stuff = 'Superpower active.'
+    text_surface = font_ultramini.render(stuff, True, (0, 0, 0))
+    text_rect = text_surface.get_rect(center=(400, 570.5))
+    screen.blit(text_surface, text_rect)   
 
     
 
@@ -1084,3 +1127,4 @@ if active == 0:
     
 pygame.quit()
 cnx.close()
+
