@@ -19,6 +19,24 @@ class Data:
         "Dual Fire": "double",
         "Randomizer": "random"
     }
+
+    powerdata = {
+        "speed": [12, 25],
+        "sniper": [10, 35],
+        "invis": [8, 30],
+        "rapid fire": [12, 25],
+        "homing": [10, 30],
+        "charge": [10, 25],
+        "dash": [0.2, 8],
+        "regen": [5, 25],
+        "blast": [0.5, 20],
+        "teleport": [1, 12],
+        "shield": [10, 25],
+        "shotgun": [10, 30],
+        "backshot": [12, 25],
+        "double": [15, 25],
+        "random": [8, 17]
+    }
     
     def __init__(self):
         # --- Game control ---
@@ -64,6 +82,7 @@ class Data:
         self.host = False
         self.mode = 'off'
         self.chosen = 'Speed'
+        self.lasttime = 0
         self.choosing = 0
         self.power = ''
         self.health = 100
@@ -75,3 +94,4 @@ class Data:
 
         self.enemies = []
         self.ebullets = []
+        
