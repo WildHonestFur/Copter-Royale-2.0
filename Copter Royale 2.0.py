@@ -7,6 +7,9 @@ import mysql.connector
 import time
 import math
 import random
+import socket
+import threading
+import json
 from CopterData import Data
 
 cnx = mysql.connector.connect(user='---', password='---', host='---', autocommit=True)
@@ -32,8 +35,42 @@ logo = pygame.transform.smoothscale(logo, (300, 300))
 clock = pygame.time.Clock()
 FPS = 60
 
+IP = "255.255.255.255"
+PORT = 2456
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+sock.bind(('', PORT))
+
 state = Data()
 
+
+def listening(state):
+    while True:
+        data, addr = sock.recvfrom(4096)
+        try:
+            message = json.loads(data.decode('utf-8'))
+            if message['user'] != state.user:
+                print('Data')
+        except:
+            pass
+
+def send(state):
+    message = {
+        'user': state.user,
+        'data': [
+            (state.x, state.y),
+            state.angle,
+            state.bullets,
+            state.pcolor,
+            state.power,
+            state.name,
+            state.health
+        ]
+    }
+    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
+    
 def draw_button(rect, text, font, mouse_pos, color, colorclick, textcolor):
     background_rect = rect.move(-2, 2)
     if rect.collidepoint(mouse_pos):
@@ -1081,9 +1118,12 @@ def game(state):
         stuff = 'Superpower active.'
     text_surface = font_ultramini.render(stuff, True, (0, 0, 0))
     text_rect = text_surface.get_rect(center=(400, 570.5))
-    screen.blit(text_surface, text_rect)   
+    screen.blit(text_surface, text_rect)
+    send(state)
 
-    
+
+
+threading.Thread(target=listening, args=(state,), daemon=True).start()
 
 while state.running:
     if state.frame == "login":
@@ -1128,4 +1168,3 @@ if active == 0:
     
 pygame.quit()
 cnx.close()
-
