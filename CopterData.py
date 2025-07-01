@@ -92,6 +92,4 @@ class Data:
         self.bullets = []
         self.lastbullet = -1
 
-        self.enemies = []
-        self.ebullets = []
-        
+        self.enemies = [] #user : [loc, angle, bullets, color, power, name, health]
