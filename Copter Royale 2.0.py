@@ -48,11 +48,11 @@ state = Data()
 
 def listening(state):
     while True:
-        data, addr = sock.recvfrom(4096)
+        data, addr = sock.recvfrom(32768)
         try:
             message = json.loads(data.decode('utf-8'))
             if message['user'] != state.user:
-                print('Data')
+                state.enemies['user'] = message['data']
         except:
             pass
 
@@ -63,7 +63,7 @@ def send(state):
             (state.x, state.y),
             state.angle,
             state.bullets,
-            state.pcolor,
+            state.pcolor[:3],
             state.power,
             state.name,
             state.health
@@ -148,7 +148,7 @@ def draw_player(name, color, x, y, angle, health):
     pygame.draw.polygon(screen, color, points)
     
     health = max(0, min(100, health))
-    pygame.draw.rect(screen, state.pcolor, pygame.Rect(x - 25, y - 35, 50 * (health / 100), 6))
+    pygame.draw.rect(screen, color, pygame.Rect(x - 25, y - 35, 50 * (health / 100), 6))
     pygame.draw.rect(screen, (0, 0, 0), pygame.Rect(x - 25, y - 35, 50.5, 6.5), 1)
 
 
@@ -175,6 +175,16 @@ def draw_minimap(map_width, map_height, minimap_size=120, margin=10):
     player_x = (state.x + map_width // 2) * scale_x
     player_y = (state.y + map_height // 2) * scale_y
 
+    for player in state.enemies:
+        dat = state.enemies[player]
+        player_x = (dat[0][0] + map_width // 2) * scale_x
+        player_y = (dat[0][1] + map_height // 2) * scale_y
+        if dat[4] != 'invis':
+            pygame.draw.circle(minimap_surface, dat[3], (player_x, player_y), 2)
+
+    player_x = (state.x + map_width // 2) * scale_x
+    player_y = (state.y + map_height // 2) * scale_y
+    
     pygame.draw.circle(minimap_surface, state.pcolor, (player_x, player_y), 2)
     screen.blit(minimap_surface, (WIDTH - minimap_size - margin, HEIGHT - minimap_size - margin))
 
@@ -346,6 +356,13 @@ def update_bullets():
             
         bullet["x"] += math.cos(bullet["angle"]) * bullet["velocity"]
         bullet["y"] += math.sin(bullet["angle"]) * bullet["velocity"]
+        if time.time()-bullet["starttime"] > bullet["lifetime"]*0.7:
+            fade = (bullet["lifetime"]-time.time()+bullet["starttime"]) / (bullet["lifetime"]*0.7)
+            bullet["alpha"] = int(255 * fade)
+        if state.power == 'charge':
+            inx = state.bullets.index(bullet)
+            state.bullets[inx]['damage'] += 0.2
+            state.bullets[inx]['type'] += 0.12
         if time.time()-bullet["starttime"] < bullet["lifetime"]:
             new_bullets.append(bullet)
     state.bullets = new_bullets
@@ -355,22 +372,30 @@ def draw_bullets():
         screen_x = bullet["x"] - state.x + WIDTH // 2
         screen_y = bullet["y"] - state.y + HEIGHT // 2
 
-        if time.time()-bullet["starttime"] > bullet["lifetime"]*0.7:
-            fade = (bullet["lifetime"]-time.time()+bullet["starttime"]) / (bullet["lifetime"]*0.7)
-            bullet["alpha"] = int(255 * fade)
-
         if bullet["alpha"] <= 0:
             continue
         
         r, g, b = bullet["color"][:3]
-        if state.power == 'charge':
-            inx = state.bullets.index(bullet)
-            state.bullets[inx]['damage'] += 0.2
-            state.bullets[inx]['type'] += 0.12
             
         bullet_surf = pygame.Surface((2*bullet['type'], 2*bullet['type']), pygame.SRCALPHA)
         pygame.draw.circle(bullet_surf, (r, g, b, bullet["alpha"]), (bullet['type'], bullet['type']), bullet['type'])
         screen.blit(bullet_surf, (screen_x - bullet['type'], screen_y - bullet['type']))
+
+def draw_enemy_bullets():
+    for player in state.enemies:
+        dat = state.enemies[player]
+        for bullet in dat[2]:        
+            screen_x = bullet["x"] - state.x + WIDTH // 2
+            screen_y = bullet["y"] - state.y + HEIGHT // 2
+
+            if bullet["alpha"] <= 0:
+                continue
+            
+            r, g, b = bullet["color"][:3]
+                
+            bullet_surf = pygame.Surface((2*bullet['type'], 2*bullet['type']), pygame.SRCALPHA)
+            pygame.draw.circle(bullet_surf, (r, g, b, bullet["alpha"]), (bullet['type'], bullet['type']), bullet['type'])
+            screen.blit(bullet_surf, (screen_x - bullet['type'], screen_y - bullet['type']))
 
 def login(state):
     mouse_pos = pygame.mouse.get_pos()
@@ -1083,6 +1108,17 @@ def game(state):
     state.angle = math.atan2(mouse_pos[1]-300, mouse_pos[0]-400)
     update_bullets()
     draw_bullets()
+    draw_enemy_bullets()
+
+    for player in state.enemies:
+        dat = state.enemies[player]
+        if dat[4] != 'invis':
+            if dat[4] == 'shield':
+                glow_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                draw_shield_glow(glow_surface, dat[0][0], dat[0][1], 12, dat[3][:3], layers=10)
+                screen.blit(glow_surface, (0, 0))
+            draw_player(dat[5], dat[3], dat[0][0], dat[0][1], dat[1], dat[6])
+        
 
     if state.power == 'shield':
         glow_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
@@ -1090,6 +1126,7 @@ def game(state):
         screen.blit(glow_surface, (0, 0))
             
     draw_player(state.name, state.pcolor, state.x, state.y, state.angle, state.health)
+    
     draw_minimap(2000, 2000)
 
     mouse_buttons = pygame.mouse.get_pressed()
