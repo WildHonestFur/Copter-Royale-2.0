@@ -1,6 +1,6 @@
-#unjoin player on game end - make active; calculate state.killcount, state.message, state.place; Reset game values; Stat update
+#calculate state.killcount, state.message, state.place; Stat update
 #check edge cases like player leaving halfway through
-#powers: speed, sniper (zoom out left), rapid fire, dash, regen, backshot, double, charge, shotgun, blast, teleport, homing, invisibility, shield, randomizer
+#sniper zoom
 
 import pygame
 import mysql.connector
@@ -12,7 +12,7 @@ import threading
 import json
 from CopterData import Data
 
-cnx = mysql.connector.connect(user='---', password='---', host='---', autocommit=True)
+cnx = mysql.connector.connect(user='----', password='----', host='----', autocommit=True)
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
@@ -51,13 +51,33 @@ def listening(state):
         data, addr = sock.recvfrom(32768)
         try:
             message = json.loads(data.decode('utf-8'))
-            if message['user'] != state.user:
-                state.enemies['user'] = message['data']
+            if message['type'] == 'data':
+                if message['user'] != state.user:
+                    state.enemies[message['user']] = message['data']
+                    
+            elif message['type'] == 'hit':
+                if message['shooter'] == state.user:
+                    newbullets = []
+                    for bullet in state.bullets:
+                        if bullet['bid'] != message['bid']:
+                            newbullets.append(bullet)
+                    state.bullets = newbullets
+                else:
+                    newbullets = []
+                    for bullet in state.enemies[message['shooter']][2]:
+                        if bullet['bid'] != message['bid']:
+                            newbullets.append(bullet)
+                    state.enemies[message['shooter']][2] = newbullets
+                    
+            elif message['type'] == 'death':
+                state.enemies.pop(message['user'], None)
+                
         except:
             pass
 
 def send(state):
     message = {
+        'type': 'data',
         'user': state.user,
         'data': [
             (state.x, state.y),
@@ -205,8 +225,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet)
     elif state.power == 'backshot':
         bullet1 = {
@@ -219,8 +241,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         bullet2 = {
             "x": bx,
             "y": by,
@@ -231,8 +255,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet1)
         state.bullets.append(bullet2)
     elif state.power == 'double':
@@ -248,8 +274,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         bullet2 = {
             "x": bx-dx,
             "y": by-dy,
@@ -260,8 +288,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet1)
         state.bullets.append(bullet2)
     elif state.power == 'shotgun':
@@ -276,8 +306,10 @@ def fire_bullet():
                 "starttime": time.time(),
                 "color": state.pcolor[:3],
                 "alpha": 255,
-                "type": 5
+                "type": 5,
+                "bid": state.bidval
             }
+            state.bidval += 1
             state.bullets.append(bullet)
     elif state.power == 'blast':
         for i in range(24):
@@ -291,8 +323,10 @@ def fire_bullet():
                 "starttime": time.time(),
                 "color": state.pcolor[:3],
                 "alpha": 255,
-                "type": 5
+                "type": 5,
+                "bid": state.bidval
             }
+            state.bidval += 1
             state.bullets.append(bullet)
     elif state.power == 'charge':
         bullet = {
@@ -305,8 +339,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet)
     elif state.power == 'homing':
         bullet = {
@@ -319,8 +355,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet)
     else:
         bullet = {
@@ -333,8 +371,10 @@ def fire_bullet():
             "starttime": time.time(),
             "color": state.pcolor[:3],
             "alpha": 255,
-            "type": 5
+            "type": 5,
+            "bid": state.bidval
         }
+        state.bidval += 1
         state.bullets.append(bullet)
 
 def update_bullets():
@@ -1040,6 +1080,41 @@ def end(state):
 
     draw_button(home_button, "Home", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
+def reset(state):
+    state.host = False
+    state.mode = 'off'
+    state.lasttime = 0
+    state.choosing = 0
+    state.power = ''
+    state.health = 100
+    state.x = 0
+    state.y = 0
+    state.angle = 0
+    state.bullets = []
+    state.lastbullet = -1
+    state.bidval = 0
+    state.enemies = {}
+
+    query = f"UPDATE status SET state = 'a' WHERE BINARY user = '{state.user}';"
+    cursor.execute(query)
+
+def collide(state):
+    for player in state.enemies:
+        dat = state.enemies[player]
+        for bullet in dat[2]:
+            if math.dist((state.x, state.y), (bullet['x'], bullet['y'])) < bullet['type']+15 and state.power != 'shield':
+                state.health -= bullet['damage']
+                if state.health <= 0:
+                    state.frame = 'end'
+                    message = {
+                        'type': 'death',
+                        'user': state.user
+                    }
+                    reset(state)
+                    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
+                return True, bullet['bid'], player
+    return False, 0, 0
+
 def game(state):
     mouse_pos = pygame.mouse.get_pos()
 
@@ -1157,8 +1232,15 @@ def game(state):
     text_rect = text_surface.get_rect(center=(400, 570.5))
     screen.blit(text_surface, text_rect)
     send(state)
-
-
+    hitcheck = collide(state)
+    if hitcheck[0]:
+        message = {
+            'type': 'hit',
+            'shooter': hitcheck[2],
+            'bid': hitcheck[1]
+        }
+        sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
+        
 
 threading.Thread(target=listening, args=(state,), daemon=True).start()
 
@@ -1202,6 +1284,12 @@ active = cursor.fetchone()[0]
 if active == 0:
     query = f"UPDATE game SET mode = 'off';"
     cursor.execute(query)
+
+message = {
+    'type': 'death',
+    'user': state.user
+}
+sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
     
 pygame.quit()
 cnx.close()
