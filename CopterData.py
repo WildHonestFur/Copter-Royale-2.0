@@ -91,5 +91,6 @@ class Data:
         self.angle = 0
         self.bullets = []
         self.lastbullet = -1
+        self.bidval = 0
 
-        self.enemies = [] #user : [loc, angle, bullets, color, power, name, health]
+        self.enemies = {} # {user : [loc, angle, bullets, color, power, name, health]}
