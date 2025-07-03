@@ -203,7 +203,7 @@ def fire_bullet():
             "damage": 40,
             "lifetime": 2.2,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -217,7 +217,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.5,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -229,7 +229,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.5,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -246,7 +246,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.5,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -258,7 +258,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.5,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -274,7 +274,7 @@ def fire_bullet():
                 "damage": 7,
                 "lifetime": 1.5,
                 "starttime": time.time(),
-                "color": state.pcolor,
+                "color": state.pcolor[:3],
                 "alpha": 255,
                 "type": 5
             }
@@ -289,7 +289,7 @@ def fire_bullet():
                 "damage": 20,
                 "lifetime": 1,
                 "starttime": time.time(),
-                "color": state.pcolor,
+                "color": state.pcolor[:3],
                 "alpha": 255,
                 "type": 5
             }
@@ -303,7 +303,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.75,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -317,7 +317,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 3,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
@@ -331,7 +331,7 @@ def fire_bullet():
             "damage": 20,
             "lifetime": 1.25,
             "starttime": time.time(),
-            "color": state.pcolor,
+            "color": state.pcolor[:3],
             "alpha": 255,
             "type": 5
         }
