@@ -79,7 +79,7 @@ def listening(state):
                         'user': state.user,
                         'shooter': None
                     }
-                    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT)
+                    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
                     state.message = 'You won!'
                     state.place = 1
                     state.frame = 'end'
