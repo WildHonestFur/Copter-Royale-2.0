@@ -1,5 +1,5 @@
-#calculate state.killcount, state.message, state.place; Stat update
-#check edge cases like player leaving halfway through
+#Stat update
+#Player overlap
 #sniper zoom
 
 import pygame
@@ -12,7 +12,7 @@ import threading
 import json
 from CopterData import Data
 
-cnx = mysql.connector.connect(user='----', password='----', host='----', autocommit=True)
+cnx = mysql.connector.connect(user='---', password='---', host='---', autocommit=True)
 
 cursor = cnx.cursor()
 cursor.execute("USE copterroyale;")
@@ -48,8 +48,8 @@ state = Data()
 
 def listening(state):
     while True:
-        data, addr = sock.recvfrom(32768)
         try:
+            data, addr = sock.recvfrom(32768)
             message = json.loads(data.decode('utf-8'))
             if message['type'] == 'data':
                 if message['user'] != state.user:
@@ -73,7 +73,16 @@ def listening(state):
                 if message['shooter'] == state.user:
                     state.killcount += 1
                 state.enemies.pop(message['user'], None)
-                
+                if len(state.enemies) == 0:
+                    message = {
+                        'type': 'death',
+                        'user': state.user,
+                        'shooter': None
+                    }
+                    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT)
+                    state.message = 'You won!'
+                    state.place = 1
+                    state.frame = 'end'
         except:
             pass
 
@@ -1075,6 +1084,7 @@ def end(state):
                 state.killcount = 0
                 state.place = 0
                 state.message = ''
+                state.changecolor = False
            
 
     screen.fill((200, 200, 200))
@@ -1305,7 +1315,8 @@ if active == 0:
 
 message = {
     'type': 'death',
-    'user': state.user
+    'user': state.user,
+    'shooter': None
 }
 sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
     
