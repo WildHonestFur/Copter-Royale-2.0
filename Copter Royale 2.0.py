@@ -70,6 +70,8 @@ def listening(state):
                     state.enemies[message['shooter']][2] = newbullets
                     
             elif message['type'] == 'death':
+                if message['shooter'] == state.user:
+                    state.killcount += 1
                 state.enemies.pop(message['user'], None)
                 
         except:
@@ -1069,6 +1071,7 @@ def end(state):
                     query = f"UPDATE game SET mode = 'off';"
                     cursor.execute(query)
                     state.mode = 'off'
+                    
                 state.killcount = 0
                 state.place = 0
                 state.message = ''
@@ -1077,6 +1080,18 @@ def end(state):
     screen.fill((200, 200, 200))
     logo_rect = logo.get_rect(center=(WIDTH/2, 170))
     screen.blit(logo, logo_rect)
+
+    text_surf = font_small.render(state.message, True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(400, 370))
+    screen.blit(text_surf, text_rect)
+
+    text_surf = font_small.render(f'Kills: {state.killcount}', True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(400-150, 446))
+    screen.blit(text_surf, text_rect)
+
+    text_surf = font_small.render(f'Place: {state.place}', True, (0, 0, 0))
+    text_rect = text_surf.get_rect(center=(400+150, 446))
+    screen.blit(text_surf, text_rect)
 
     draw_button(home_button, "Home", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
@@ -1106,9 +1121,12 @@ def collide(state):
                 state.health -= bullet['damage']
                 if state.health <= 0:
                     state.frame = 'end'
+                    state.place = len(state.enemies)+1
+                    state.message = f'You were killed by {dat[5]}'
                     message = {
                         'type': 'death',
-                        'user': state.user
+                        'user': state.user,
+                        'shooter': player
                     }
                     reset(state)
                     sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
