@@ -1,6 +1,6 @@
-#Stat update
-#Player overlap
-#sniper zoom
+#sniper zoom, full screen
+#game countdown, position allocation, message stack
+#fix mode and host code
 
 import pygame
 import mysql.connector
@@ -73,16 +73,6 @@ def listening(state):
                 if message['shooter'] == state.user:
                     state.killcount += 1
                 state.enemies.pop(message['user'], None)
-                if len(state.enemies) == 0:
-                    message = {
-                        'type': 'death',
-                        'user': state.user,
-                        'shooter': None
-                    }
-                    sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
-                    state.message = 'You won!'
-                    state.place = 1
-                    state.frame = 'end'
         except:
             pass
 
@@ -928,8 +918,10 @@ def waiting(state):
         cursor.execute(query)
         active = cursor.fetchone()[0]
         state.bargoal = 400*joined/(joined+active)
-
-    state.barsize += min(3, abs(state.bargoal - state.barsize)) * (1 if state.bargoal > state.barsize else -1)
+        
+        
+    speed = 400
+    state.barsize += min(speed, abs(state.bargoal - state.barsize)) * (1 if state.bargoal > state.barsize else -1)
 
     pygame.draw.rect(screen,(0, 125, 222), (200, 465, state.barsize, 30))
     pygame.draw.rect(screen,(0, 95, 187), (200, 465, 400, 30), 5)
@@ -999,6 +991,7 @@ def power(state):
                 cursor.execute(query)
                 val = cursor.fetchone()[0]
                 if val in ('ffa', 'team'):
+                    state.mode = val
                     state.frame = 'wait'
                     query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                     cursor.execute(query)
@@ -1106,6 +1099,19 @@ def end(state):
     draw_button(home_button, "Home", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
 def reset(state):
+    query = f"UPDATE stats SET games = games + 1 WHERE user = {state.user};"
+    cursor.execute(query)
+    if state.place == 1:
+        query = f"UPDATE stats SET won = won + 1 WHERE user = {state.user};"
+        cursor.execute(query)
+    if state.place <= 3:
+        query = f"UPDATE stats SET topthree = topthree + 1 WHERE user = {state.user};"
+        cursor.execute(query)
+    query = f"UPDATE stats SET kills = kills + {state.killcount} WHERE user = {state.user};"
+    cursor.execute(query)
+    query = f"UPDATE stats SET maxkills = GREATEST(maxkills, {state.killcount}) WHERE user = {state.user};"
+    cursor.execute(query)
+    
     state.host = False
     state.mode = 'off'
     state.lasttime = 0
@@ -1268,6 +1274,18 @@ def game(state):
             'bid': hitcheck[1]
         }
         sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
+
+    if len(state.enemies) == 0:
+        message = {
+            'type': 'death',
+            'user': state.user,
+            'shooter': None
+        }
+        sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
+        state.message = 'You won!'
+        state.place = 1
+        state.frame = 'end'
+        reset(state)
         
 
 threading.Thread(target=listening, args=(state,), daemon=True).start()
