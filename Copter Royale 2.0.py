@@ -73,6 +73,10 @@ def listening(state):
                 if message['shooter'] == state.user:
                     state.killcount += 1
                 state.enemies.pop(message['user'], None)
+
+            elif message['type'] == 'loc':
+                state.x = message['loc'][0]
+                state.y = message['loc'][1]
         except:
             pass
 
@@ -937,12 +941,8 @@ def waiting(state):
             query = f"UPDATE game SET mode = '{val}play';"
             cursor.execute(query)
 
-            query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
-            cursor.execute(query)
-            pcount = cursor.fetchone()[0]
-
             locations = []
-            for p in range(pcount):
+            for p in range(100):
                 good = False
                 while not good:
                     new = (random.random()*2000-1000, random.random()*2000-1000)
@@ -953,7 +953,11 @@ def waiting(state):
                         good = True
                         locations.append(new)
 
-            print(locations)
+            message = {
+                'type': 'loc',
+                'loc': locations
+            }
+            sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
             
 
 def mode(state):
@@ -974,6 +978,9 @@ def mode(state):
                 query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
                 state.mode = 'ffa'
+                query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                cursor.execute(query)
+                state.code = cursor.fetchone()[0]
                 
             elif team_button.collidepoint(event.pos):
                 query = f"UPDATE game SET mode = 'team';"
@@ -982,6 +989,9 @@ def mode(state):
                 query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
                 state.mode = 'team'
+                query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                cursor.execute(query)
+                state.code = cursor.fetchone()[0]
 
     screen.fill((200, 200, 200))
     logo_rect = logo.get_rect(center=(WIDTH/2, 170))
@@ -1015,6 +1025,9 @@ def power(state):
                     state.frame = 'wait'
                     query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                     cursor.execute(query)
+                    query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                    cursor.execute(query)
+                    state.code = cursor.fetchone()[0]
                 elif val == 'off':
                     state.frame = 'choose'
                     state.host = True
@@ -1136,6 +1149,7 @@ def reset(state):
     
     state.host = False
     state.mode = 'off'
+    state.code = 0
     state.lasttime = 0
     state.starttime = 0
     state.endtime = 0
@@ -1298,6 +1312,9 @@ def game(state):
         }
         sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
 
+    if len(state.enemies) == 0 and time.time() - state.starttime > 3 and state.endtime == 0:
+        state.endtime = time.time()
+
     if len(state.enemies) == 0 and time.time() - state.starttime > 3 and time.time() - state.endtime > 1:        
         message = {
             'type': 'death',
@@ -1309,9 +1326,6 @@ def game(state):
         state.place = 1
         state.frame = 'end'
         reset(state)
-
-    if len(state.enemies) == 0 and time.time() - state.starttime > 3 and state.endtime == 0:
-        state.endtime = time.time()
 
     if time.time() - state.starttime < 3:
         text_surf = font_large.render(str(3-int(time.time() - state.starttime)), True, (0, 0, 0))
