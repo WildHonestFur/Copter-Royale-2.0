@@ -526,7 +526,7 @@ def logging(typeval, state):
                             query = f"INSERT INTO player VALUES ('{state.username_text}', '', 242, 53, 48);"
                             cursor.execute(query)
                             state.user = state.username_text
-                            query = f"INSERT INTO stats (user) VALUES ('{state.user}');"
+                            query = f"INSERT INTO stats VALUES ('{state.user}', 0, 0, 0, 0, 0);"
                             cursor.execute(query)
                             query = f"INSERT INTO status VALUES ('{state.user}', 'a');"
                             cursor.execute(query)
@@ -634,7 +634,7 @@ def home(state):
                     "Games Won": None,
                     "Top 3 Finishes": None,
                     "Total Kills": None,
-                    "Average Kills": None,
+                    "Average Kills": 0.0000,
                     "Max Kills": None
                 }
                 state.active_box = None
@@ -909,7 +909,7 @@ def waiting(state):
     screen.blit(text_surface, text_rect)
 
     now = time.time()
-    if now > state.lastcheck + 1:
+    if now > state.lastcheck + 0.2:
         state.lastcheck = now
         query = f"SELECT count(*) FROM status WHERE state = 'j';"
         cursor.execute(query)
@@ -1114,6 +1114,8 @@ def reset(state):
     cursor.execute(query)
     query = f"UPDATE stats SET maxkills = GREATEST(maxkills, {state.killcount}) WHERE BINARY user = '{state.user}';"
     cursor.execute(query)
+
+    print('Hi')
     
     state.host = False
     state.mode = 'off'
