@@ -80,6 +80,9 @@ class Data:
 
         # --- Game part ---
         self.host = False
+        self.starttime = 0
+        self.endtime = 0
+        self.code = 0
         self.mode = 'off'
         self.chosen = 'Speed'
         self.lasttime = 0
