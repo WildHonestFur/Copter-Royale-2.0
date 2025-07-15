@@ -1,6 +1,5 @@
 #sniper zoom, full screen
-#game countdown, position allocation, message stack
-#fix mode and host code
+#position allocation, message stack
 
 import pygame
 import mysql.connector
@@ -24,6 +23,7 @@ WIDTH, HEIGHT = 800, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Copter Royale 2.0")
 
+font_large = pygame.font.SysFont('Courier New', 60)
 font_medium = pygame.font.SysFont('Courier New', 36)
 font_small = pygame.font.SysFont('Courier New', 24)
 font_mini = pygame.font.SysFont('Courier New', 20)
@@ -646,7 +646,7 @@ def home(state):
                 query = f"SELECT mode FROM game;"
                 cursor.execute(query)
                 val = cursor.fetchone()[0]
-                if val in ('ffa', 'team'):
+                if val in ('ffa', 'team', 'choose'):
                     state.frame = 'power'
                 elif val == 'off':
                     state.frame = 'power'
@@ -928,6 +928,7 @@ def waiting(state):
 
     if 399 < state.barsize < 401:
         state.frame = 'game'
+        state.starttime = time.time()
         state.lasttime = time.time()
         query = f"SELECT mode FROM game;"
         cursor.execute(query)
@@ -990,7 +991,7 @@ def power(state):
                 query = f"SELECT mode FROM game;"
                 cursor.execute(query)
                 val = cursor.fetchone()[0]
-                if val in ('ffa', 'team'):
+                if val in ('ffa', 'team', 'choose'):
                     state.mode = val
                     state.frame = 'wait'
                     query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
@@ -998,6 +999,8 @@ def power(state):
                 elif val == 'off':
                     state.frame = 'choose'
                     state.host = True
+                    query = f"UPDATE game SET mode = 'choose';"
+                    cursor.execute(query)
             elif next_button.collidepoint(event.pos):
                 state.choosing = min(4, state.choosing+1)
             elif prev_button.collidepoint(event.pos):
@@ -1099,17 +1102,17 @@ def end(state):
     draw_button(home_button, "Home", font_medium, mouse_pos, (0, 95, 187), (0, 125, 222), (0, 0, 0))
 
 def reset(state):
-    query = f"UPDATE stats SET games = games + 1 WHERE user = {state.user};"
+    query = f"UPDATE stats SET games = games + 1 WHERE BINARY user = '{state.user}';"
     cursor.execute(query)
     if state.place == 1:
-        query = f"UPDATE stats SET won = won + 1 WHERE user = {state.user};"
+        query = f"UPDATE stats SET won = won + 1 WHERE BINARY user = '{state.user}';"
         cursor.execute(query)
     if state.place <= 3:
-        query = f"UPDATE stats SET topthree = topthree + 1 WHERE user = {state.user};"
+        query = f"UPDATE stats SET topthree = topthree + 1 WHERE BINARY user = '{state.user}';"
         cursor.execute(query)
-    query = f"UPDATE stats SET kills = kills + {state.killcount} WHERE user = {state.user};"
+    query = f"UPDATE stats SET kills = kills + {state.killcount} WHERE BINARY user = '{state.user}';"
     cursor.execute(query)
-    query = f"UPDATE stats SET maxkills = GREATEST(maxkills, {state.killcount}) WHERE user = {state.user};"
+    query = f"UPDATE stats SET maxkills = GREATEST(maxkills, {state.killcount}) WHERE BINARY user = '{state.user}';"
     cursor.execute(query)
     
     state.host = False
@@ -1170,9 +1173,7 @@ def game(state):
                         state.lasttime = time.time()
                 elif -1000 < state.x + mouse_pos[0]-400 < 1000 and -1000 < state.y + mouse_pos[1]-300 < 1000:
                     state.power = Data.powermap[state.chosen]
-                    state.lasttime = time.time()
-                    
-                    
+                    state.lasttime = time.time()        
 
     keys = pygame.key.get_pressed()
     dx = 0
@@ -1196,21 +1197,22 @@ def game(state):
         state.power = ''
         state.lasttime = time.time()
 
-    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-        dx -= 1
-    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-        dx += 1
-    if keys[pygame.K_UP] or keys[pygame.K_w]:
-        dy -= 1
-    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-        dy += 1
+    if time.time() - state.starttime > 3:
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            dx -= 1
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            dx += 1
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            dy -= 1
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            dy += 1
 
-    if dx != 0 and dy != 0:
-        dx *= 0.7071
-        dy *= 0.7071
+        if dx != 0 and dy != 0:
+            dx *= 0.7071
+            dy *= 0.7071
     
-    state.x = max(-1000, min(state.x + dx * speed, 1000))
-    state.y = max(-1000, min(state.y + dy * speed, 1000))
+        state.x = max(-1000, min(state.x + dx * speed, 1000))
+        state.y = max(-1000, min(state.y + dy * speed, 1000))
            
     screen.fill((170, 170, 170))
     draw_grid(2000, 2000)
@@ -1239,7 +1241,7 @@ def game(state):
     draw_minimap(2000, 2000)
 
     mouse_buttons = pygame.mouse.get_pressed()
-    if mouse_buttons[0] and time.time() > state.lastbullet+wait:
+    if mouse_buttons[0] and time.time() > state.lastbullet+wait and time.time() - state.starttime > 3:
         fire_bullet()
         state.lastbullet = time.time()
         
@@ -1267,7 +1269,7 @@ def game(state):
     screen.blit(text_surface, text_rect)
     send(state)
     hitcheck = collide(state)
-    if hitcheck[0]:
+    if hitcheck[0] and time.time() - state.starttime > 3:
         message = {
             'type': 'hit',
             'shooter': hitcheck[2],
@@ -1275,7 +1277,7 @@ def game(state):
         }
         sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
 
-    if len(state.enemies) == 0:
+    if len(state.enemies) == 0 and time.time() - state.starttime > 3:
         message = {
             'type': 'death',
             'user': state.user,
@@ -1286,6 +1288,11 @@ def game(state):
         state.place = 1
         state.frame = 'end'
         reset(state)
+
+    if time.time() - state.starttime < 3:
+        text_surf = font_large.render(str(3-int(time.time() - state.starttime)), True, (0, 0, 0))
+        text_rect = text_surf.get_rect(center=(400, 300))
+        screen.blit(text_surf, text_rect)
         
 
 threading.Thread(target=listening, args=(state,), daemon=True).start()
