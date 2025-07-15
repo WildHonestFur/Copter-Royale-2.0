@@ -978,7 +978,7 @@ def mode(state):
                 query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
                 state.mode = 'ffa'
-                query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                query = f"SELECT count(*) FROM status WHERE state == 'j';"
                 cursor.execute(query)
                 state.code = cursor.fetchone()[0]
                 
@@ -989,7 +989,7 @@ def mode(state):
                 query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                 cursor.execute(query)
                 state.mode = 'team'
-                query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                query = f"SELECT count(*) FROM status WHERE state == 'j';"
                 cursor.execute(query)
                 state.code = cursor.fetchone()[0]
 
@@ -1025,7 +1025,7 @@ def power(state):
                     state.frame = 'wait'
                     query = f"UPDATE status SET state = 'j' WHERE BINARY user = '{state.user}';"
                     cursor.execute(query)
-                    query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+                    query = f"SELECT count(*) FROM status WHERE state == 'j';"
                     cursor.execute(query)
                     state.code = cursor.fetchone()[0]
                 elif val == 'off':
