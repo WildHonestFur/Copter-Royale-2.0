@@ -937,6 +937,25 @@ def waiting(state):
             query = f"UPDATE game SET mode = '{val}play';"
             cursor.execute(query)
 
+            query = f"SELECT count(*) FROM status WHERE state in ('a', 'j');"
+            cursor.execute(query)
+            pcount = cursor.fetchone()[0]
+
+            locations = []
+            for p in range(pcount):
+                good = False
+                while not good:
+                    new = (random.random()*2000-1000, random.random()*2000-1000)
+                    for loc in locations:
+                        if math.dist(loc, new) < 50:
+                            break
+                    else:
+                        good = True
+                        locations.append(new)
+
+            print(locations)
+            
+
 def mode(state):
     mouse_pos = pygame.mouse.get_pos()
 
@@ -1114,12 +1133,12 @@ def reset(state):
     cursor.execute(query)
     query = f"UPDATE stats SET maxkills = GREATEST(maxkills, {state.killcount}) WHERE BINARY user = '{state.user}';"
     cursor.execute(query)
-
-    print('Hi')
     
     state.host = False
     state.mode = 'off'
     state.lasttime = 0
+    state.starttime = 0
+    state.endtime = 0
     state.choosing = 0
     state.power = ''
     state.health = 100
@@ -1279,7 +1298,7 @@ def game(state):
         }
         sock.sendto(json.dumps(message).encode('utf-8'), (IP, PORT))
 
-    if len(state.enemies) == 0 and time.time() - state.starttime > 3:
+    if len(state.enemies) == 0 and time.time() - state.starttime > 3 and time.time() - state.endtime > 1:        
         message = {
             'type': 'death',
             'user': state.user,
@@ -1290,6 +1309,9 @@ def game(state):
         state.place = 1
         state.frame = 'end'
         reset(state)
+
+    if len(state.enemies) == 0 and time.time() - state.starttime > 3 and state.endtime == 0:
+        state.endtime = time.time()
 
     if time.time() - state.starttime < 3:
         text_surf = font_large.render(str(3-int(time.time() - state.starttime)), True, (0, 0, 0))
